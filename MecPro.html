@@ -602,59 +602,66 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);displa
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ════════════════════════════════
-//  DATABASE — IndexedDB
+//  DATABASE — SUPABASE
 // ════════════════════════════════
-const DB_NAME = 'MecProDB';
-const DB_VER = 1;
-let db;
+const SUPABASE_URL = 'https://vkzdfohtessgprpkubvw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_21vdn2UWAtiF9uRd4_Sg6A_ZKULa_zA';
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-function initDB() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = e => {
-      const d = e.target.result;
-      if (!d.objectStoreNames.contains('budgets')) {
-        const s = d.createObjectStore('budgets', { keyPath: 'id', autoIncrement: true });
-        s.createIndex('status', 'status', { unique: false });
-        s.createIndex('date', 'date', { unique: false });
-      }
-      if (!d.objectStoreNames.contains('catalog')) {
-        d.createObjectStore('catalog', { keyPath: 'id', autoIncrement: true });
-      }
-      if (!d.objectStoreNames.contains('settings')) {
-        d.createObjectStore('settings', { keyPath: 'key' });
-      }
-    };
-    req.onsuccess = e => { db = e.target.result; res(db); };
-    req.onerror = e => rej(e);
-  });
+// Convierte fila de BD (snake_case) → objeto JS
+function fromDB(row) {
+  if (!row) return null;
+  const obj = { ...row };
+  if ('is_quick'   in obj) { obj.isQuick   = obj.is_quick;   delete obj.is_quick; }
+  if ('created_at' in obj) { obj.createdAt = obj.created_at; delete obj.created_at; }
+  if ('updated_at' in obj) { obj.updatedAt = obj.updated_at; delete obj.updated_at; }
+  return obj;
 }
 
-function dbGet(store, id) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    const req = id !== undefined ? tx.objectStore(store).get(id) : tx.objectStore(store).getAll();
-    req.onsuccess = e => res(e.target.result);
-    req.onerror = e => rej(e);
-  });
+// Convierte objeto JS → fila de BD (snake_case)
+function toDB(obj) {
+  const row = { ...obj };
+  if ('isQuick'   in row) { row.is_quick   = row.isQuick;   delete row.isQuick; }
+  if ('createdAt' in row) { row.created_at = row.createdAt; delete row.createdAt; }
+  if ('updatedAt' in row) { row.updated_at = row.updatedAt; delete row.updatedAt; }
+  return row;
 }
-function dbPut(store, obj) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).put(obj);
-    req.onsuccess = e => res(e.target.result);
-    req.onerror = e => rej(e);
-  });
+
+async function initDB() { /* Supabase no necesita inicialización local */ }
+
+async function dbGet(store, id) {
+  if (id !== undefined) {
+    const { data, error } = await supa.from(store).select('*').eq('id', id).single();
+    if (error) throw error;
+    return fromDB(data);
+  } else {
+    const { data, error } = await supa.from(store).select('*').order('id', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(fromDB);
+  }
 }
-function dbDelete(store, id) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).delete(id);
-    req.onsuccess = () => res();
-    req.onerror = e => rej(e);
-  });
+
+async function dbPut(store, obj) {
+  const row = toDB({ ...obj });
+  row.updated_at = new Date().toISOString();
+  if (row.id) {
+    const { data, error } = await supa.from(store).update(row).eq('id', row.id).select().single();
+    if (error) throw error;
+    return data.id;
+  } else {
+    delete row.id; // deja que Supabase asigne el id
+    const { data, error } = await supa.from(store).insert(row).select().single();
+    if (error) throw error;
+    return data.id;
+  }
+}
+
+async function dbDelete(store, id) {
+  const { error } = await supa.from(store).delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ════════════════════════════════
@@ -694,11 +701,10 @@ const DEFAULT_CATALOG = [
 ];
 
 async function seedCatalog() {
-  const existing = await dbGet('catalog');
-  if (existing.length === 0) {
-    for (const item of DEFAULT_CATALOG) {
-      await dbPut('catalog', item);
-    }
+  const { count } = await supa.from('catalog').select('*', { count: 'exact', head: true });
+  if (count === 0) {
+    const { error } = await supa.from('catalog').insert(DEFAULT_CATALOG);
+    if (error) console.error('Error al sembrar catálogo:', error);
   }
 }
 
@@ -731,9 +737,11 @@ function filterStatus(el, status) {
 }
 
 async function renderList() {
-  const all = await dbGet('budgets');
+  const { data, error } = await supa.from('budgets').select('*').order('id', { ascending: false });
+  if (error) { console.error(error); return; }
+  const all = (data || []).map(fromDB);
   const q = document.getElementById('search-input').value.toLowerCase();
-  let items = all.reverse();
+  let items = all;
   if (currentFilter !== 'all') items = items.filter(b => b.status === currentFilter);
   if (q) items = items.filter(b =>
     (b.client?.nombre||'').toLowerCase().includes(q) ||
@@ -1511,11 +1519,22 @@ async function saveQuickBudget() {
 //  INIT
 // ════════════════════════════════
 initDB().then(async () => {
+  // Indicador de conexión en topbar
+  const dot = document.createElement('div');
+  dot.id = 'db-status';
+  dot.title = 'Conectado a Supabase';
+  dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#2ECC71;margin-left:6px;flex-shrink:0;transition:background .3s;';
+  document.querySelector('.topbar-left').appendChild(dot);
+
   await seedCatalog();
   renderList();
 }).catch(e => {
   console.error('DB error:', e);
-  alert('Error al inicializar la base de datos. Verifica que tu navegador soporte IndexedDB.');
+  const dot = document.createElement('div');
+  dot.title = 'Error de conexión';
+  dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#E74C3C;margin-left:6px;flex-shrink:0;';
+  document.querySelector('.topbar-left').appendChild(dot);
+  alert('⚠️ No se pudo conectar a Supabase.\nVerifica tu conexión a internet.');
 });
 </script>
 </body>
