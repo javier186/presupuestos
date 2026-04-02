@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MecPro — Presupuestos</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E86C1A">
 <style>
 :root{
   --org:#E86C1A;--org-d:#C4540E;--org-l:rgba(232,108,26,0.12);
@@ -1536,6 +1538,13 @@ initDB().then(async () => {
   document.querySelector('.topbar-left').appendChild(dot);
   alert('⚠️ No se pudo conectar a Supabase.\nVerifica tu conexión a internet.');
 });
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js")
+    .then(() => console.log("PWA lista 🔥"))
+    .catch(err => console.log("Error SW:", err));
+}
 </script>
 </body>
 </html>
