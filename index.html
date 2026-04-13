@@ -591,24 +591,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);displa
         <label>Descripción del trabajo *</label>
         <textarea id="qb_desc" rows="4" style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r8);color:var(--tx);padding:11px 13px;font-family:'Barlow',sans-serif;font-size:14px;outline:none;resize:vertical;width:100%;line-height:1.5;"></textarea>
       </div>
-      <div class="form-row" style="margin-bottom:4px;">
-        <div class="field">
-          <label>💰 Repuestos ($)</label>
-          <input type="number" id="qb_rep" min="0" step="0.01" inputmode="decimal" placeholder="0.00"
-            oninput="recalcQbTotal()"
-            style="font-size:17px;font-weight:700;color:var(--blue);">
-        </div>
-        <div class="field">
-          <label>🔧 Mano de Obra ($)</label>
-          <input type="number" id="qb_mo" min="0" step="0.01" inputmode="decimal" placeholder="0.00"
-            oninput="recalcQbTotal()"
-            style="font-size:17px;font-weight:700;color:var(--green);">
-        </div>
-      </div>
-      <div style="background:var(--org-l);border:1px solid var(--org);border-radius:var(--r8);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--org);">TOTAL A COBRAR</span>
-        <span id="qb_total_display" style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--org);">$0.00</span>
-        <input type="hidden" id="qb_total" value="0">
+      <div class="field">
+        <label>Total a Cobrar ($) *</label>
+        <input type="number" id="qb_total" min="0" step="0.01" inputmode="decimal" style="font-size:18px;font-weight:700;color:var(--org);">
       </div>
       <div id="qb_error2" style="display:none;color:var(--red);font-size:13px;margin-bottom:10px;"></div>
       <div class="modal-actions">
@@ -1332,25 +1317,12 @@ function printBudget() {
 // ════════════════════════════════
 //  QUICK BUDGET (PRESUPUESTO RÁPIDO)
 // ════════════════════════════════
-function recalcQbTotal() {
-  const rep = parseFloat(document.getElementById('qb_rep').value) || 0;
-  const mo  = parseFloat(document.getElementById('qb_mo').value)  || 0;
-  const sum = rep + mo;
-  document.getElementById('qb_total').value = sum;
-  document.getElementById('qb_total_display').textContent = '$' + sum.toFixed(2);
-}
-
 function openQuickBudget() {
   document.getElementById('qb_msg').value = '';
   document.getElementById('qb_error').style.display = 'none';
   document.getElementById('qb-step1').style.display = 'block';
   document.getElementById('qb-step2').style.display = 'none';
   document.getElementById('modal-quick').style.display = 'flex';
-  // Reset step2 fields
-  ['qb_nombre','qb_tel','qb_vehiculo','qb_placa','qb_desc'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-  const repEl = document.getElementById('qb_rep'); if(repEl) repEl.value='';
-  const moEl  = document.getElementById('qb_mo');  if(moEl)  moEl.value='';
-  recalcQbTotal();
   setTimeout(()=>document.getElementById('qb_msg').focus(), 100);
 }
 
@@ -1374,9 +1346,7 @@ function parseQuickBudget() {
   document.getElementById('qb_vehiculo').value = r.vehiculo;
   document.getElementById('qb_placa').value    = r.placa.toUpperCase();
   document.getElementById('qb_desc').value     = r.descripcion;
-  document.getElementById('qb_rep').value      = r.totalRepuestos || '';
-  document.getElementById('qb_mo').value       = r.totalManoObra  || '';
-  recalcQbTotal();
+  document.getElementById('qb_total').value    = r.total || '';
   document.getElementById('qb_error2').style.display = 'none';
 
   document.getElementById('qb-step1').style.display = 'none';
@@ -1384,24 +1354,8 @@ function parseQuickBudget() {
 }
 
 function parsePresupuestoTexto(txt) {
-  const out = { nombre:'', telefono:'', vehiculo:'', placa:'', descripcion:'', total:0, totalRepuestos:0, totalManoObra:0 };
+  const out = { nombre:'', telefono:'', vehiculo:'', placa:'', descripcion:'', total:0 };
   const lines = txt.split(/\n/).map(l => l.trim()).filter(Boolean);
-
-  // ── REPUESTOS ──────────────────────────────────────────────────────────────
-  // Busca: Repuestos: $200 / repuestos = 200 / materiales $200
-  const repRx = /(?:repuesto[s]?|material(?:es)?|partes?)\s*[=:$]?\s*\$?\s*([\d.,]+)/i;
-  for (const l of lines) {
-    const m = l.match(repRx);
-    if (m) { out.totalRepuestos = parseFloat(m[1].replace(',','.')); break; }
-  }
-
-  // ── MANO DE OBRA ────────────────────────────────────────────────────────────
-  // Busca: Mano de obra: $100 / m.o. = 100 / labor $100
-  const moRx = /(?:mano\s+de\s+obra|m\.?\s*o\.?|labor|servicio[s]?)\s*[=:$]?\s*\$?\s*([\d.,]+)/i;
-  for (const l of lines) {
-    const m = l.match(moRx);
-    if (m) { out.totalManoObra = parseFloat(m[1].replace(',','.')); break; }
-  }
 
   // ── TOTAL ──────────────────────────────────────────────────────────────────
   // Busca: Total = $770  /  Total: $770  /  Total reparación= $770  /  $770
@@ -1410,18 +1364,10 @@ function parsePresupuestoTexto(txt) {
     const m = l.match(totalRx);
     if (m) { out.total = parseFloat(m[1].replace(',','.')); break; }
   }
-  // Si tenemos ambos subtotales, el total es la suma
-  if (!out.total && (out.totalRepuestos || out.totalManoObra)) {
-    out.total = out.totalRepuestos + out.totalManoObra;
-  }
   // fallback: último número con $ en el texto
   if (!out.total) {
     const allPrices = [...txt.matchAll(/\$\s*([\d.,]+)/g)].map(m=>parseFloat(m[1].replace(',','.')));
     if (allPrices.length) out.total = Math.max(...allPrices);
-  }
-  // Si hay total global pero no subtotales, asignar todo a mano de obra por defecto
-  if (out.total && !out.totalRepuestos && !out.totalManoObra) {
-    out.totalManoObra = out.total;
   }
 
   // ── TELÉFONO ───────────────────────────────────────────────────────────────
@@ -1522,31 +1468,15 @@ function parsePresupuestoTexto(txt) {
 async function saveQuickBudget() {
   const nombre = document.getElementById('qb_nombre').value.trim();
   const desc = document.getElementById('qb_desc').value.trim();
-  const totalRep = parseFloat(document.getElementById('qb_rep').value) || 0;
-  const totalMO  = parseFloat(document.getElementById('qb_mo').value)  || 0;
-  const total    = parseFloat(document.getElementById('qb_total').value) || 0;
+  const total = parseFloat(document.getElementById('qb_total').value)||0;
   const errEl = document.getElementById('qb_error2');
   if (!nombre) { errEl.textContent='El nombre del cliente es obligatorio.'; errEl.style.display='block'; return; }
-  if (!desc)   { errEl.textContent='La descripción del trabajo es obligatoria.'; errEl.style.display='block'; return; }
-  if (!total)  { errEl.textContent='Ingresa al menos un monto (Repuestos o Mano de Obra).'; errEl.style.display='block'; return; }
+  if (!desc) { errEl.textContent='La descripción del trabajo es obligatoria.'; errEl.style.display='block'; return; }
+  if (!total) { errEl.textContent='El total a cobrar es obligatorio.'; errEl.style.display='block'; return; }
   errEl.style.display='none';
 
   const vehiculoStr = document.getElementById('qb_vehiculo').value.trim();
   const all = await dbGet('budgets');
-
-  // Construir ítems según los montos ingresados
-  const items = [];
-  if (totalRep > 0) {
-    items.push({ id: Date.now(), name: 'Repuestos', detail: desc, price: totalRep, qty: 1, cat: 'Repuesto' });
-  }
-  if (totalMO > 0) {
-    items.push({ id: Date.now() + 1, name: 'Mano de Obra', detail: desc, price: totalMO, qty: 1, cat: 'Mano de Obra' });
-  }
-  // Si solo hay un total global (sin desglose), crear un único ítem
-  if (!items.length) {
-    items.push({ id: Date.now(), name: 'Servicio', detail: desc, price: total, qty: 1, cat: 'Servicio' });
-  }
-
   const budgetData = {
     num: 'R-' + String(all.length + 1).padStart(4,'0'),
     date: new Date().toISOString().split('T')[0],
@@ -1565,7 +1495,14 @@ async function saveQuickBudget() {
       color: '',
       km: '',
     },
-    items,
+    items: [{
+      id: Date.now(),
+      name: 'Mano de Obra',
+      detail: desc,
+      price: total,
+      qty: 1,
+      cat: 'Mano de Obra'
+    }],
     abonos: [],
     total,
     isQuick: true,
